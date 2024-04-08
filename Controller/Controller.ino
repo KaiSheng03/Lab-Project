@@ -1,524 +1,375 @@
-#include <SPI.h>
-#include <TimedAction.h>
+/*******************************************************************************
+ * This file is part of PsxNewLib.                                             *
+ *                                                                             *
+ * Copyright (C) 2019-2020 by SukkoPera <software@sukkology.net>               *
+ *                                                                             *
+ * PsxNewLib is free software: you can redistribute it and/or                  *
+ * modify it under the terms of the GNU General Public License as published by *
+ * the Free Software Foundation, either version 3 of the License, or           *
+ * (at your option) any later version.                                         *
+ *                                                                             *
+ * PsxNewLib is distributed in the hope that it will be useful,                *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of              *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               *
+ * GNU General Public License for more details.                                *
+ *                                                                             *
+ * You should have received a copy of the GNU General Public License           *
+ * along with PsxNewLib. If not, see http://www.gnu.org/licenses.              *
+ *******************************************************************************
+ *
+ * This sketch will dump to serial whatever is done on a PSX controller. It is
+ * an excellent way to test that all buttons/sticks are read correctly.
+ *
+ * It's missing support for analog buttons, that will come in the future.
+ *
+ * This example drives the controller through the hardware SPI port, so pins are
+ * fixed and depend on the board/microcontroller being used. For instance, on an
+ * Arduino Uno connections must be as follows:
+ *
+ * CMD: Pin 11
+ * DATA: Pin 12
+ * CLK: Pin 13
+ *
+ * Any pin can be used for ATTN, but please note that most 8-bit AVRs require
+ * the HW SPI SS pin to be kept as an output for HW SPI to be in master mode, so
+ * using that pin for ATTN is a natural choice. On the Uno this would be pin 10.
+ *
+ * It also works perfectly on OpenPSX2AmigaPadAdapter boards (as it's basically
+ * a modified Uno).
+ *
+ * There is another similar one using a bitbanged protocol implementation that
+ * can be used on any pins/board.
+ */
 
-//#include "ModbusMaster.h"
-#include "ProgramConstant.h"
+/*
+  UP: 16
+  LEFT: 128
+  RIGHT: 32
+  DOWN: 64
+  SQUARE: 32768
+  TRIANGLE: 4096
+  CIRCLE: 8192
+  CROSS: 16384
+  L1: 1024
+  L2: 256
+  L3: 2
+  R1: 2048
+  R2: 512
+  R3: 4
+*/
+
+#include <DigitalIO.h>
+#include <PsxControllerHwSpi.h>
 #include "Variable.h"
+#include <avr/pgmspace.h>
+#include <TimedAction.h>
+#include "ProgramConstant.h"
 
-// Modbus network
-//ModbusMaster ModbusNetwork1(&Serial1, 115200, ModbusWriteNotReadPin);
+typedef const __FlashStringHelper* FlashStr;
+typedef const byte* PGM_BYTES_P;
+#define PSTR_TO_F(s) reinterpret_cast<const __FlashStringHelper*>(s)
 
-// Vector control
-//uint16_t Payload[10] = { 0 };
+// This can be changed freely but please see above
+const byte PIN_PS2_ATT = 10;
 
-uint32_t starting_time = 0;
-bool starting = true;
+const byte PIN_BUTTONPRESS = A0;
+const byte PIN_HAVECONTROLLER = A1;
 
-// bool write_complete = false;
-// uint32_t write_complete_millis = 0;
+const char buttonSelectName[] PROGMEM = "Select";
+const char buttonL3Name[] PROGMEM = "L3";
+const char buttonR3Name[] PROGMEM = "R3";
+const char buttonStartName[] PROGMEM = "Start";
+const char buttonUpName[] PROGMEM = "Up";
+const char buttonRightName[] PROGMEM = "Right";
+const char buttonDownName[] PROGMEM = "Down";
+const char buttonLeftName[] PROGMEM = "Left";
+const char buttonL2Name[] PROGMEM = "L2";
+const char buttonR2Name[] PROGMEM = "R2";
+const char buttonL1Name[] PROGMEM = "L1";
+const char buttonR1Name[] PROGMEM = "R1";
+const char buttonTriangleName[] PROGMEM = "Triangle";
+const char buttonCircleName[] PROGMEM = "Circle";
+const char buttonCrossName[] PROGMEM = "Cross";
+const char buttonSquareName[] PROGMEM = "Square";
 
-void LED_Blink_Task_Code()
-{
-    if (!LED_Light)
-    {
-        digitalWrite(LED_BUILTIN, HIGH);
-        LED_Light = true;
-    }
+const char* const psxButtonNames[PSX_BUTTONS_NO] PROGMEM = {
+  buttonSelectName,
+  buttonL3Name,
+  buttonR3Name,
+  buttonStartName,
+  buttonUpName,
+  buttonRightName,
+  buttonDownName,
+  buttonLeftName,
+  buttonL2Name,
+  buttonR2Name,
+  buttonL1Name,
+  buttonR1Name,
+  buttonTriangleName,
+  buttonCircleName,
+  buttonCrossName,
+  buttonSquareName
+};
 
-    else
-    {
-        digitalWrite(LED_BUILTIN, LOW);
-        LED_Light = false;
-    }
+void ClearButtonStatus() {
+  UP_Pressed = false;
+  RIGHT_Pressed = false;
+  DOWN_Pressed = false;
+  LEFT_Pressed = false;
+  L1_Pressed = false;
+  R1_Pressed = false;
+  SQUARE_Pressed = false;
+  CIRCLE_Pressed = false;
+  TRIANGLE_Pressed = false;
+  CROSS_Pressed = false;
+  L2_Pressed = false;
+  R2_Pressed = false;
 }
 
-void DebugMessageTaskCode()
-{
-    if (DebugMessage != "")
-    {
-        Serial.println(DebugMessage);
-        DebugMessage = "";
-    }
+void Input() {
+  switch (buttonState) {
+    case UP:
+      UP_Pressed = true;
+      Serial.println("Moveforward");
+      Front_Left_Dir_1 = HIGH;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = HIGH;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = HIGH;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = HIGH;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case LEFT:
+      LEFT_Pressed = true;
+      Serial.println("Moveleft");
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = HIGH;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = HIGH;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = HIGH;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = HIGH;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case RIGHT:
+      RIGHT_Pressed = true;
+      Serial.println("MoveRight");
+      Front_Left_Dir_1 = HIGH;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = HIGH;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = HIGH;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = HIGH;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case DOWN:
+      DOWN_Pressed = true;
+      Serial.println("MoveBackward");
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = HIGH;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = HIGH;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = HIGH;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = HIGH;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case SQUARE:
+      SQUARE_Pressed = true;
+      Serial.println("SouthWest");
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = HIGH;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = HIGH;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case TRIANGLE:
+      TRIANGLE_Pressed = true;
+      Serial.println("NorthWest");
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = HIGH;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = HIGH;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case CIRCLE:
+      CIRCLE_Pressed = true;
+      Serial.println("NorthEast");
+      Front_Left_Dir_1 = HIGH;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = HIGH;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case CROSS:
+      CROSS_Pressed = true;
+      Serial.println("SouthEast");
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = HIGH;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = HIGH;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case L1:
+      L1_Pressed = true;
+      Serial.println("RotateCounterClockwise");
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = HIGH;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = HIGH;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = HIGH;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = HIGH;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case L2:
+      L2_Pressed = true;
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case L3:
+      L3_Pressed = true;
+      break;
+
+    case R1:
+      R1_Pressed = true;
+      Serial.println("RotateClockwise");
+      Front_Left_Dir_1 = HIGH;
+      Front_Left_Dir_2 = LOW;
+      Front_Left_PWM = SPEED;
+
+      Front_Right_Dir_1 = HIGH;
+      Front_Right_Dir_2 = LOW;
+      Front_Right_PWM = SPEED;
+
+      Rear_Left_Dir_1 = HIGH;
+      Rear_Left_Dir_2 = LOW;
+      Rear_Left_PWM = SPEED;
+
+      Rear_Right_Dir_1 = HIGH;
+      Rear_Right_Dir_2 = LOW;
+      Rear_Right_PWM = SPEED;
+      break;
+
+    case R2:
+      R2_Pressed = true;
+      break;
+
+    case R3:
+      R3_Pressed = true;
+      break;
+  }
+  ClearButtonStatus();
 }
 
-void PS4_Repeat_Init_Code()
-{
-    SPI.begin();
-    SPI.beginTransaction(SPISettings(100000, LSBFIRST, SPI_MODE3));
-    // pinMode(SPI_MISO, INPUT_PULLUP);
-    // pinMode(SlaveAck, INPUT_PULLUP);
-    // pinMode(SPI_CLK, OUTPUT); // configure ports
-    // pinMode(SPI_MOSI, OUTPUT);
-    // pinMode(SlaveSelect, OUTPUT);
-    //digitalWrite(SlaveSelect, HIGH);
-    PS2_SPI_SEND(Enter_Config, 5);
-    PS2_SPI_SEND(Turn_ON_Analog_Mode, 9);
-    PS2_SPI_SEND(Exit_Config, 9);
-    PS2_SPI_SEND(ReadAllData, BufferSize);
-    if (SPI_Packet[2] != 0x5A)
-    {
-        USB_Detected = false;
-        DebugMessage = F("\nNo controller found, check wiring");
-        PS4_Repeat_Init_Task.enable();
-    }
-    else
-    {
-        USB_Detected = true;
-        DebugMessage = F("Found Controller, configured successful");
-        PS4_Repeat_Init_Task.disable();
-    }
+void Process() {
 }
 
-void Input()
-{
-    PS2_SPI_SEND(ReadAllData, BufferSize);
-    if (SPI_Packet[3] ^ 0xFF)
-    {
-        if (~SPI_Packet[3] & DPAD_UP)
-            UP_Pressed = 1;
-        if (~SPI_Packet[3] & DPAD_DOWN)
-            DOWN_Pressed = 1;
-        if (~SPI_Packet[3] & DPAD_LEFT)
-            LEFT_Pressed = 1;
-        if (~SPI_Packet[3] & DPAD_RIGHT)
-            RIGHT_Pressed = 1;
-    }
-    if (SPI_Packet[4] ^ 0xFF)
-    {
-        if (~SPI_Packet[4] & L1_PRESSED)
-            L1_Pressed = 1;
-        if (~SPI_Packet[4] & L2_PRESSED)
-            L2_Pressed = 1;
-        if (~SPI_Packet[4] & R1_PRESSED)
-            R1_Pressed = 1;
-        if (~SPI_Packet[4] & R2_PRESSED)
-            R2_Pressed = 1;
-        if (~SPI_Packet[4] & GREEN_TRIANGLE_PRESSED)
-            TRIANGLE_Pressed = 1;
-        if (~SPI_Packet[4] & RED_CIRCLE_PRESSED)
-            CIRCLE_Pressed = 1;
-        if (~SPI_Packet[4] & BLUE_CROSS_PRESSED)
-            CROSS_Pressed = 1;
-        if (~SPI_Packet[4] & PINK_SQUARE_PRESSED)
-            SQUARE_Pressed = 1;
-    }
-}
-
-void ClearButtonStatus()
-{
-    UP_Pressed = false;
-    RIGHT_Pressed = false;
-    DOWN_Pressed = false;
-    LEFT_Pressed = false;
-    L1_Pressed = false;
-    R1_Pressed = false;
-    SQUARE_Pressed = false;
-    CIRCLE_Pressed = false;
-    TRIANGLE_Pressed = false;
-    CROSS_Pressed = false;
-    L2_Pressed = false;
-    R2_Pressed = false;
-}
-
-void Process()
-{
-    switch (OperatingState)
-    {
-    case USB_Detect_Hold:
-        if (USB_Detected = true)
-        {
-            OperatingState = WaitStart;
-        }
-        else
-            DebugMessage = F("Detecting PS4 from USB Host");
-        break;
-
-    case WaitStart:
-        if (CROSS_Pressed)
-        {
-            OperatingState = CheckActionToDo;
-            InputTask.reset();
-            ProcessTask.reset();
-            Serial.println("\nCross pressed, start receiving command...");
-            delay(1000);
-        }
-        ClearButtonStatus();
-        break;
-
-    case CheckActionToDo:
-        if (CROSS_Pressed)
-        {
-            if (ButtonState != SouthEast)
-            {
-                ButtonState = SouthEast;
-                Serial.println("SouthEast");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = HIGH;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = HIGH;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-
-            }
-            ClearButtonStatus();
-        }
-        else if (CIRCLE_Pressed)
-        {
-            if (ButtonState != NorthEast)
-            {
-                ButtonState = NorthEast;
-                Serial.println("NorthEast");
-                Front_Left_Dir_1 = HIGH;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = HIGH;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (SQUARE_Pressed)
-        {
-            if (ButtonState != SouthWest)
-            {
-                ButtonState = SouthWest;
-                Serial.println("SouthWest");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = HIGH;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = HIGH;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (TRIANGLE_Pressed)
-        {
-            if (ButtonState != NorthWest)
-            {
-                ButtonState = NorthWest;
-                Serial.println("NorthWest");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = HIGH;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = HIGH;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (UP_Pressed)
-        {
-            if (ButtonState != Forward)
-            {
-                ButtonState = Forward;
-                Serial.println("Moveforward");
-                Front_Left_Dir_1 = HIGH;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = HIGH;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = HIGH;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = HIGH;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (DOWN_Pressed)
-        {
-            if (ButtonState != Backward)
-            {
-                ButtonState = Backward;
-                Serial.println("MoveBackward");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = HIGH;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = HIGH;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = HIGH;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = HIGH;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (LEFT_Pressed)
-        {
-            if (ButtonState != Left)
-            {
-                ButtonState = Left;
-                Serial.println("Moveleft");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = HIGH;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = HIGH;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = HIGH;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = HIGH;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (RIGHT_Pressed)
-        {
-            if (ButtonState != Right)
-            {
-                ButtonState = Right;
-                Serial.println("MoveRight");
-                Front_Left_Dir_1 = HIGH;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = HIGH;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = HIGH;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = HIGH;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (L1_Pressed)
-        {
-            if (ButtonState != RotateAntiClockwise)
-            {
-                ButtonState = RotateAntiClockwise;
-                Serial.println("RotateCounterClockwise");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = HIGH;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = HIGH;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = HIGH;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = HIGH;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (R1_Pressed)
-        {
-            if (ButtonState != RotateClockwise)
-            {
-                ButtonState = RotateClockwise;
-                Serial.println("RotateClockwise");
-                Front_Left_Dir_1 = HIGH;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = HIGH;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = HIGH;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = HIGH;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        else if (L2_Pressed)
-        {
-            if (ButtonState != Stop)
-            {
-                ButtonState = Stop;
-                Serial.println("Stop");
-                Front_Left_Dir_1 = LOW;
-                Front_Left_Dir_2 = LOW;
-                Front_Left_PWM = SPEED;
-
-                Front_Right_Dir_1 = LOW;
-                Front_Right_Dir_2 = LOW;
-                Front_Right_PWM = SPEED;
-
-                Rear_Left_Dir_1 = LOW;
-                Rear_Left_Dir_2 = LOW;
-                Rear_Left_PWM = SPEED;
-
-                Rear_Right_Dir_1 = LOW;
-                Rear_Right_Dir_2 = LOW;
-                Rear_Right_PWM = SPEED;
-            }
-            ClearButtonStatus();
-        }
-        break;
-
-    default:
-        OperatingState = WaitStart;
-        // Serial.println("\nWarning : Serious Error Occur, Entering Unexpected state");
-        ClearButtonStatus();
-    }
-}
-
-void PS2_SPI_SEND(byte* Data, uint8_t DataSize)
-{
-    uint8_t i = 0;
-    digitalWrite(SlaveSelect, LOW);
-    while (i < DataSize)
-    {
-        SPI_Packet[i] = SPI.transfer(Data[i]);
-        delayMicroseconds(16);
-        i = i + 1;
-    }
-    digitalWrite(SlaveSelect, HIGH);
-}
-
-void Sync_Basic_Task()
-{
-    // The following code is purposely to control when each task is being execute
-    // Without the following code, program can still run, but programmer have no idea which Task will be execute first.
-    LED_Blink_Task.reset();
-    // delay(3);
-    InputTask.reset(); // Input Task Run from 10ms from this point onwards
-    delay(3); // Process Task Shall Execute 3ms after Input Task
-    ProcessTask.reset(); // Process Task Run from 10ms from this point onwards
-    //delay(3); // Output Task Shall Execute 3ms after Process Task
-    //MotorControllerNetworkTask.reset(); // Output Task Run from 10ms from this point onwards
-    // The above code is purposely to control when each task is being execute
-}
-
-void setup()
-{
-    OperatingState = USB_Detect_Hold;
-    USB_Detected = false;
-
-    pinMode(SPI_MISO, INPUT_PULLUP);
-    pinMode(SlaveAck, INPUT_PULLUP);
-    pinMode(SPI_CLK, OUTPUT); // configure ports
-    pinMode(SPI_MOSI, OUTPUT);
-    pinMode(SlaveSelect, OUTPUT);
-
-    pinMode(FORWARD_LEFT_DIR_1, OUTPUT);
-    pinMode(FORWARD_LEFT_DIR_2, OUTPUT);
-    pinMode(FORWARD_LEFT_PWM, OUTPUT);
-
-    pinMode(FORWARD_RIGHT_DIR_1, OUTPUT);
-    pinMode(FORWARD_RIGHT_DIR_2, OUTPUT);
-    pinMode(FORWARD_RIGHT_PWM, OUTPUT);  
-  
-    pinMode(REAR_LEFT_DIR_1, OUTPUT);
-    pinMode(REAR_LEFT_DIR_2, OUTPUT);
-    pinMode(REAR_LEFT_PWM, OUTPUT);
-    
-    pinMode(REAR_RIGHT_DIR_1, OUTPUT);
-    pinMode(REAR_RIGHT_DIR_2, OUTPUT);
-    pinMode(REAR_RIGHT_PWM, OUTPUT);
-
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
-
-    Serial.begin(115200);
-    //ModbusNetwork1.Start();
-
-    DebugMessageTask.reset();
-    Sync_Basic_Task();
-
-    InputTask.enable();
-    ProcessTask.enable();
-    LED_Blink_Task.enable();
-    ButtonState = Stop;
-    DebugMessageTask.enable();
-
-    PS4_Repeat_Init_Code();
-}
-
-void loop()
-{
-    PS4_Repeat_Init_Task.check();
-    if (USB_Detected)
-    {
-        //ModbusNetwork1.MasterListen();
-        LED_Blink_Task.check();
-        //ModbusNetwork1.MasterListen();
-        InputTask.check();
-        //ModbusNetwork1.MasterListen();
-        ProcessTask.check();
-        //ModbusNetwork1.MasterListen();
-        //MotorControllerNetworkTask.check();
-        //ModbusNetwork1.MasterListen();
-    }
-    else
-    {
-        Sync_Basic_Task();
-    }
-    DebugMessageTask.check();
-}
-
-void Output(){
-  analogWrite(FORWARD_LEFT_PWM, SPEED);
-  analogWrite(FORWARD_RIGHT_PWM, SPEED);
-  analogWrite(REAR_LEFT_PWM, SPEED);
-  analogWrite(REAR_RIGHT_PWM, SPEED);
+void Output() {
+  analogWrite(FORWARD_LEFT_PWM, Front_Left_PWM);
+  analogWrite(FORWARD_RIGHT_PWM, Front_Right_PWM);
+  analogWrite(REAR_LEFT_PWM, Rear_Left_PWM);
+  analogWrite(REAR_RIGHT_PWM, Rear_Right_PWM);
 
   digitalWrite(FORWARD_LEFT_DIR_1, Front_Left_Dir_1);
   digitalWrite(FORWARD_LEFT_DIR_2, Front_Left_Dir_2);
@@ -528,7 +379,256 @@ void Output(){
 
   digitalWrite(REAR_LEFT_DIR_1, Rear_Left_Dir_1);
   digitalWrite(REAR_LEFT_DIR_2, Rear_Left_Dir_2);
-  
+
   digitalWrite(REAR_RIGHT_DIR_1, Rear_Right_Dir_1);
   digitalWrite(REAR_RIGHT_DIR_2, Rear_Right_Dir_2);
+}
+
+byte psxButtonToIndex(PsxButtons psxButtons) {
+  byte i;
+
+  for (i = 0; i < PSX_BUTTONS_NO; ++i) {
+    if (psxButtons & 0x01) {
+      break;
+    }
+
+    psxButtons >>= 1U;
+  }
+
+  return i;
+}
+
+FlashStr getButtonName(PsxButtons psxButton) {
+  FlashStr ret = F("");
+
+  byte b = psxButtonToIndex(psxButton);
+  if (b < PSX_BUTTONS_NO) {
+    PGM_BYTES_P bName = reinterpret_cast<PGM_BYTES_P>(pgm_read_ptr(&(psxButtonNames[b])));
+    ret = PSTR_TO_F(bName);
+  }
+
+  return ret;
+}
+
+void dumpButtons(PsxButtons psxButtons) {
+  static PsxButtons lastB = 0;
+
+  if (psxButtons != lastB) {
+    lastB = psxButtons;  // Save it before we alter it
+    buttonState = lastB;
+    Serial.print(F("Pressed: "));
+
+    for (byte i = 0; i < PSX_BUTTONS_NO; ++i) {
+      byte b = psxButtonToIndex(psxButtons);
+      if (b < PSX_BUTTONS_NO) {
+        PGM_BYTES_P bName = reinterpret_cast<PGM_BYTES_P>(pgm_read_ptr(&(psxButtonNames[b])));
+        Serial.print(PSTR_TO_F(bName));
+      }
+
+      psxButtons &= ~(1 << b);
+
+      if (psxButtons != 0) {
+        Serial.print(F(", "));
+      }
+    }
+
+    Serial.println();
+  }
+}
+
+void dumpAnalog(const char* str, const byte x, const byte y) {
+  Serial.print(str);
+  Serial.print(F(" analog: x = "));
+  Serial.print(x);
+  Serial.print(F(", y = "));
+  Serial.println(y);
+
+  if (x == 128 && y == 128) {
+    Front_Left_PWM = 0;
+    Front_Right_PWM = 0;
+    Rear_Left_PWM = 0;
+    Rear_Right_PWM = 0;
+    Front_Left_Dir_1 = LOW;
+    Front_Left_Dir_2 = LOW;
+
+    Front_Right_Dir_1 = LOW;
+    Front_Right_Dir_2 = LOW;
+
+    Rear_Left_Dir_1 = LOW;
+    Rear_Left_Dir_2 = LOW;
+
+    Rear_Right_Dir_1 = LOW;
+    Rear_Right_Dir_2 = LOW;
+  } else {
+    if (forwardSpeed > 0) {
+      Front_Left_Dir_1 = HIGH;
+      Front_Left_Dir_2 = LOW;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = HIGH;
+
+      Rear_Left_Dir_1 = HIGH;
+      Rear_Left_Dir_2 = LOW;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = HIGH;
+    } else {
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = HIGH;
+
+      Front_Right_Dir_1 = HIGH;
+      Front_Right_Dir_2 = LOW;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = HIGH;
+
+      Rear_Right_Dir_1 = HIGH;
+      Rear_Right_Dir_2 = LOW;
+    }
+    if (lateralSpeed > 0) {
+      Front_Left_Dir_1 = HIGH;
+      Front_Left_Dir_2 = LOW;
+
+      Front_Right_Dir_1 = HIGH;
+      Front_Right_Dir_2 = LOW;
+
+      Rear_Left_Dir_1 = LOW;
+      Rear_Left_Dir_2 = HIGH;
+
+      Rear_Right_Dir_1 = LOW;
+      Rear_Right_Dir_2 = HIGH;
+    } else {
+      Front_Left_Dir_1 = LOW;
+      Front_Left_Dir_2 = HIGH;
+
+      Front_Right_Dir_1 = LOW;
+      Front_Right_Dir_2 = HIGH;
+
+      Rear_Left_Dir_1 = HIGH;
+      Rear_Left_Dir_2 = LOW;
+
+      Rear_Right_Dir_1 = HIGH;
+      Rear_Right_Dir_2 = LOW;
+    }
+  }
+}
+
+const char ctrlTypeUnknown[] PROGMEM = "Unknown";
+const char ctrlTypeDualShock[] PROGMEM = "Dual Shock";
+const char ctrlTypeDsWireless[] PROGMEM = "Dual Shock Wireless";
+const char ctrlTypeGuitHero[] PROGMEM = "Guitar Hero";
+const char ctrlTypeOutOfBounds[] PROGMEM = "(Out of bounds)";
+
+const char* const controllerTypeStrings[PSCTRL_MAX + 1] PROGMEM = {
+  ctrlTypeUnknown,
+  ctrlTypeDualShock,
+  ctrlTypeDsWireless,
+  ctrlTypeGuitHero,
+  ctrlTypeOutOfBounds
+};
+
+PsxControllerHwSpi<PIN_PS2_ATT> psx;
+
+boolean haveController = false;
+
+void setup() {
+  pinMode(FORWARD_LEFT_DIR_1, OUTPUT);
+  pinMode(FORWARD_LEFT_DIR_2, OUTPUT);
+  pinMode(FORWARD_LEFT_PWM, OUTPUT);
+
+  pinMode(FORWARD_RIGHT_DIR_1, OUTPUT);
+  pinMode(FORWARD_RIGHT_DIR_2, OUTPUT);
+  pinMode(FORWARD_RIGHT_PWM, OUTPUT);
+
+  pinMode(REAR_LEFT_DIR_1, OUTPUT);
+  pinMode(REAR_LEFT_DIR_2, OUTPUT);
+  pinMode(REAR_LEFT_PWM, OUTPUT);
+
+  pinMode(REAR_RIGHT_DIR_1, OUTPUT);
+  pinMode(REAR_RIGHT_DIR_2, OUTPUT);
+  pinMode(REAR_RIGHT_PWM, OUTPUT);
+
+  fastPinMode(PIN_BUTTONPRESS, OUTPUT);
+  fastPinMode(PIN_HAVECONTROLLER, OUTPUT);
+
+  delay(300);
+
+  Serial.begin(115200);
+  Serial.println(F("Ready!"));
+}
+
+void loop() {
+  static byte slx, sly, srx, sry;
+
+  fastDigitalWrite(PIN_HAVECONTROLLER, haveController);
+
+  if (!haveController) {
+    if (psx.begin()) {
+      Serial.println(F("Controller found!"));
+      delay(300);
+      if (!psx.enterConfigMode()) {
+        Serial.println(F("Cannot enter config mode"));
+      } else {
+        PsxControllerType ctype = psx.getControllerType();
+        PGM_BYTES_P cname = reinterpret_cast<PGM_BYTES_P>(pgm_read_ptr(&(controllerTypeStrings[ctype < PSCTRL_MAX ? static_cast<byte>(ctype) : PSCTRL_MAX])));
+        Serial.print(F("Controller Type is: "));
+        Serial.println(PSTR_TO_F(cname));
+
+        if (!psx.enableAnalogSticks()) {
+          Serial.println(F("Cannot enable analog sticks"));
+        }
+
+        //~ if (!psx.setAnalogMode (false)) {
+        //~ Serial.println (F("Cannot disable analog mode"));
+        //~ }
+        //~ delay (10);
+
+        if (!psx.enableAnalogButtons()) {
+          Serial.println(F("Cannot enable analog buttons"));
+        }
+
+        if (!psx.exitConfigMode()) {
+          Serial.println(F("Cannot exit config mode"));
+        }
+      }
+
+      haveController = true;
+    }
+  } else {
+    if (!psx.read()) {
+      Serial.println(F("Controller lost :("));
+      haveController = false;
+    } else {
+      InputTask.check();
+      ProcessTask.check();
+      OutputTask.check();
+
+      fastDigitalWrite(PIN_BUTTONPRESS, !!psx.getButtonWord());
+      dumpButtons(psx.getButtonWord());
+
+      byte lx, ly;
+      psx.getLeftAnalog(lx, ly);
+      if (lx != slx || ly != sly) {
+        dumpAnalog("Left", lx, ly);
+        slx = lx;
+        sly = ly;
+      }
+
+      byte rx, ry;
+      psx.getRightAnalog(rx, ry);
+      if (rx != srx || ry != sry) {
+        dumpAnalog("Right", rx, ry);
+        srx = rx;
+        sry = ry;
+      }
+      forwardSpeed = 128 - sly;
+      lateralSpeed = slx - 128;
+      centerRPM = srx - 129;
+      Front_Left_PWM = (1.0 / 58.0) * (sin(135) * lateralSpeed + cos(135) * forwardSpeed + 58 * centerRPM);
+      Front_Right_PWM = (1.0 / 58.0) * (sin(45) * lateralSpeed + cos(45) * forwardSpeed + 58 * centerRPM);
+      Rear_Left_PWM = (1.0 / 58.0) * (sin(225) * lateralSpeed + cos(225) * forwardSpeed + 58 * centerRPM);
+      Rear_Right_PWM = (1.0 / 58.0) * (sin(315) * lateralSpeed + cos(315) * forwardSpeed + 58 * centerRPM);
+    }
+  }
+  delay(1000 / 60);
 }
