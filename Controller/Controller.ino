@@ -443,74 +443,74 @@ void dumpAnalog(const char* str, const byte x, const byte y) {
   Serial.print(F(", y = "));
   Serial.println(y);
 
-  if (x == 128 && y == 128) {
-    Front_Left_PWM = 0;
-    Front_Right_PWM = 0;
-    Rear_Left_PWM = 0;
-    Rear_Right_PWM = 0;
-    Front_Left_Dir_1 = LOW;
-    Front_Left_Dir_2 = LOW;
+  // if (x == 128 && y == 128) {
+  //   Front_Left_PWM = 0;
+  //   Front_Right_PWM = 0;
+  //   Rear_Left_PWM = 0;
+  //   Rear_Right_PWM = 0;
+  //   Front_Left_Dir_1 = LOW;
+  //   Front_Left_Dir_2 = LOW;
 
-    Front_Right_Dir_1 = LOW;
-    Front_Right_Dir_2 = LOW;
+  //   Front_Right_Dir_1 = LOW;
+  //   Front_Right_Dir_2 = LOW;
 
-    Rear_Left_Dir_1 = LOW;
-    Rear_Left_Dir_2 = LOW;
+  //   Rear_Left_Dir_1 = LOW;
+  //   Rear_Left_Dir_2 = LOW;
 
-    Rear_Right_Dir_1 = LOW;
-    Rear_Right_Dir_2 = LOW;
-  } else {
-    if (forwardSpeed > 0) {
-      Front_Left_Dir_1 = HIGH;
-      Front_Left_Dir_2 = LOW;
+  //   Rear_Right_Dir_1 = LOW;
+  //   Rear_Right_Dir_2 = LOW;
+  // } else {
+  //   if (forwardSpeed > 0) {
+  //     Front_Left_Dir_1 = HIGH;
+  //     Front_Left_Dir_2 = LOW;
 
-      Front_Right_Dir_1 = LOW;
-      Front_Right_Dir_2 = HIGH;
+  //     Front_Right_Dir_1 = LOW;
+  //     Front_Right_Dir_2 = HIGH;
 
-      Rear_Left_Dir_1 = HIGH;
-      Rear_Left_Dir_2 = LOW;
+  //     Rear_Left_Dir_1 = HIGH;
+  //     Rear_Left_Dir_2 = LOW;
 
-      Rear_Right_Dir_1 = LOW;
-      Rear_Right_Dir_2 = HIGH;
-    } else {
-      Front_Left_Dir_1 = LOW;
-      Front_Left_Dir_2 = HIGH;
+  //     Rear_Right_Dir_1 = LOW;
+  //     Rear_Right_Dir_2 = HIGH;
+  //   } else {
+  //     Front_Left_Dir_1 = LOW;
+  //     Front_Left_Dir_2 = HIGH;
 
-      Front_Right_Dir_1 = HIGH;
-      Front_Right_Dir_2 = LOW;
+  //     Front_Right_Dir_1 = HIGH;
+  //     Front_Right_Dir_2 = LOW;
 
-      Rear_Left_Dir_1 = LOW;
-      Rear_Left_Dir_2 = HIGH;
+  //     Rear_Left_Dir_1 = LOW;
+  //     Rear_Left_Dir_2 = HIGH;
 
-      Rear_Right_Dir_1 = HIGH;
-      Rear_Right_Dir_2 = LOW;
-    }
-    if (lateralSpeed > 0) {
-      Front_Left_Dir_1 = HIGH;
-      Front_Left_Dir_2 = LOW;
+  //     Rear_Right_Dir_1 = HIGH;
+  //     Rear_Right_Dir_2 = LOW;
+  //   }
+  //   if (lateralSpeed > 0) {
+  //     Front_Left_Dir_1 = HIGH;
+  //     Front_Left_Dir_2 = LOW;
 
-      Front_Right_Dir_1 = HIGH;
-      Front_Right_Dir_2 = LOW;
+  //     Front_Right_Dir_1 = HIGH;
+  //     Front_Right_Dir_2 = LOW;
 
-      Rear_Left_Dir_1 = LOW;
-      Rear_Left_Dir_2 = HIGH;
+  //     Rear_Left_Dir_1 = LOW;
+  //     Rear_Left_Dir_2 = HIGH;
 
-      Rear_Right_Dir_1 = LOW;
-      Rear_Right_Dir_2 = HIGH;
-    } else {
-      Front_Left_Dir_1 = LOW;
-      Front_Left_Dir_2 = HIGH;
+  //     Rear_Right_Dir_1 = LOW;
+  //     Rear_Right_Dir_2 = HIGH;
+  //   } else {
+  //     Front_Left_Dir_1 = LOW;
+  //     Front_Left_Dir_2 = HIGH;
 
-      Front_Right_Dir_1 = LOW;
-      Front_Right_Dir_2 = HIGH;
+  //     Front_Right_Dir_1 = LOW;
+  //     Front_Right_Dir_2 = HIGH;
 
-      Rear_Left_Dir_1 = HIGH;
-      Rear_Left_Dir_2 = LOW;
+  //     Rear_Left_Dir_1 = HIGH;
+  //     Rear_Left_Dir_2 = LOW;
 
-      Rear_Right_Dir_1 = HIGH;
-      Rear_Right_Dir_2 = LOW;
-    }
-  }
+  //     Rear_Right_Dir_1 = HIGH;
+  //     Rear_Right_Dir_2 = LOW;
+  //   }
+  // }
 }
 
 const char ctrlTypeUnknown[] PROGMEM = "Unknown";
@@ -623,11 +623,61 @@ void loop() {
       }
       forwardSpeed = 128 - sly;
       lateralSpeed = slx - 128;
-      centerRPM = srx - 129;
-      Front_Left_PWM = (1.0 / 58.0) * (sin(135) * lateralSpeed + cos(135) * forwardSpeed + 58 * centerRPM);
-      Front_Right_PWM = (1.0 / 58.0) * (sin(45) * lateralSpeed + cos(45) * forwardSpeed + 58 * centerRPM);
-      Rear_Left_PWM = (1.0 / 58.0) * (sin(225) * lateralSpeed + cos(225) * forwardSpeed + 58 * centerRPM);
-      Rear_Right_PWM = (1.0 / 58.0) * (sin(315) * lateralSpeed + cos(315) * forwardSpeed + 58 * centerRPM);
+      centerRPM = srx - 128;
+      
+      Front_Left_PWM = (1.0/0.58) * (0.7071 * lateralSpeed + 0.7071 * forwardSpeed + 0.58 * centerRPM);
+      Front_Right_PWM = (1.0/0.58) * (0.7071 * lateralSpeed + -0.7071 * forwardSpeed + 0.58 * centerRPM);
+      Rear_Left_PWM = (1.0/0.58) * (-0.7071 * lateralSpeed + 0.7071 * forwardSpeed + 0.58 * centerRPM);
+      Rear_Right_PWM = (1.0/0.58) * (-0.7071 * lateralSpeed + -0.7071 * forwardSpeed + 0.58 * centerRPM);
+
+      if(Front_Left_PWM > 0){
+        Front_Left_Dir_1 = HIGH;
+        Front_Left_Dir_2 = LOW;
+      }
+      else{
+        Front_Left_Dir_1 = LOW;
+        Front_Left_Dir_2 = HIGH;
+      }
+
+      if(Front_Right_PWM > 0){
+        Front_Right_Dir_1 = HIGH;
+        Front_Right_Dir_2 = LOW;
+      }
+      else{
+        Front_Right_Dir_1 = LOW;
+        Front_Right_Dir_2 = HIGH;
+      }
+
+      if(Rear_Left_PWM > 0){
+        Rear_Left_Dir_1 = HIGH;
+        Rear_Left_Dir_2 = LOW;
+      }
+      else{
+        Rear_Left_Dir_1 = LOW;
+        Rear_Left_Dir_2 = HIGH;
+      }
+
+      if(Rear_Right_PWM > 0){
+        Rear_Right_Dir_1 = HIGH;
+        Rear_Right_Dir_2 = LOW;
+      }
+      else{
+        Rear_Right_Dir_1 = LOW;
+        Rear_Right_Dir_2 = HIGH;
+      }
+      Serial.print("Front Left: ");
+      Serial.print(Front_Left_PWM);
+      Serial.print(" Front Right: ");
+      Serial.print(Front_Right_PWM);
+      Serial.print(" Rear Left: ");
+      Serial.print(Rear_Left_PWM);
+      Serial.print(" Rear Right: ");
+      Serial.println(Rear_Right_PWM);
+      Front_Left_PWM = abs(Front_Left_PWM);
+      Front_Right_PWM = abs(Front_Right_PWM);
+      Rear_Left_PWM = abs(Rear_Left_PWM);
+      Rear_Right_PWM = abs(Rear_Right_PWM);
+
     }
   }
   delay(1000 / 60);
