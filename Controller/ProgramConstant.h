@@ -14,6 +14,16 @@
 #define REAR_RIGHT_DIR_2 A2
 #define REAR_RIGHT_PWM 3
 
+#define SERVO_PIN 10
+
+#define ULTRASONIC_TRIG_PIN 11
+#define ULTRASONIC_ECHO_PIN A0
+
+#define BUZZER_PIN 2
+
+#define LED1 1
+#define LED2 14
+
 #define SPEED 255
 
 enum{

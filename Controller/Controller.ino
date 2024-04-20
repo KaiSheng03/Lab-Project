@@ -126,6 +126,25 @@ void ClearButtonStatus() {
   R2_Pressed = false;
 }
 
+void Ultrasonic() {
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ULTRASONIC_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+
+  int duration = pulseIn(ULTRASONIC_ECHO_PIN, HIGH);
+  distance = duration*0.034/2;
+
+  if(distance < 3){
+    Serial.println("Something's on the back");
+    Front_Left_PWM = 0;
+    Front_Right_PWM = 0;
+    Rear_Left_PWM = 0;
+    Rear_Right_PWM = 0;
+  }
+}
+
 void Input() {
   switch (buttonState) {
     case UP:
@@ -289,6 +308,12 @@ void Input() {
       break;
 
     case L1:
+      Serial.println("SERVO UP");
+      servoStep++;
+      if(servoStep > 180){
+        servoStep = 180;
+      }
+
       L1_Pressed = true;
       Serial.println("RotateCounterClockwise");
       Front_Left_Dir_1 = LOW;
@@ -332,6 +357,11 @@ void Input() {
       break;
 
     case R1:
+      Serial.println("SERVO DOWN");
+      servoStep--;
+      if(servoStep < 0){
+        servoStep = 0;
+      }
       R1_Pressed = true;
       Serial.println("RotateClockwise");
       Front_Left_Dir_1 = HIGH;
@@ -352,6 +382,16 @@ void Input() {
       break;
 
     case R2:
+      if(lightOpen){
+        Serial.println("Close Light");
+        digitalWrite(LED1, LOW);
+        digitalWrite(LED2, LOW);
+      }
+      else{
+        Serial.println("Open Light");
+        digitalWrite(LED1, HIGH);
+        digitalWrite(LED2, HIGH);
+      }
       R2_Pressed = true;
       break;
 
@@ -382,6 +422,8 @@ void Output() {
 
   digitalWrite(REAR_RIGHT_DIR_1, Rear_Right_Dir_1);
   digitalWrite(REAR_RIGHT_DIR_2, Rear_Right_Dir_2);
+
+  cameraServo.write(servoStep);
 }
 
 byte psxButtonToIndex(PsxButtons psxButtons) {
@@ -442,75 +484,6 @@ void dumpAnalog(const char* str, const byte x, const byte y) {
   Serial.print(x);
   Serial.print(F(", y = "));
   Serial.println(y);
-
-  // if (x == 128 && y == 128) {
-  //   Front_Left_PWM = 0;
-  //   Front_Right_PWM = 0;
-  //   Rear_Left_PWM = 0;
-  //   Rear_Right_PWM = 0;
-  //   Front_Left_Dir_1 = LOW;
-  //   Front_Left_Dir_2 = LOW;
-
-  //   Front_Right_Dir_1 = LOW;
-  //   Front_Right_Dir_2 = LOW;
-
-  //   Rear_Left_Dir_1 = LOW;
-  //   Rear_Left_Dir_2 = LOW;
-
-  //   Rear_Right_Dir_1 = LOW;
-  //   Rear_Right_Dir_2 = LOW;
-  // } else {
-  //   if (forwardSpeed > 0) {
-  //     Front_Left_Dir_1 = HIGH;
-  //     Front_Left_Dir_2 = LOW;
-
-  //     Front_Right_Dir_1 = LOW;
-  //     Front_Right_Dir_2 = HIGH;
-
-  //     Rear_Left_Dir_1 = HIGH;
-  //     Rear_Left_Dir_2 = LOW;
-
-  //     Rear_Right_Dir_1 = LOW;
-  //     Rear_Right_Dir_2 = HIGH;
-  //   } else {
-  //     Front_Left_Dir_1 = LOW;
-  //     Front_Left_Dir_2 = HIGH;
-
-  //     Front_Right_Dir_1 = HIGH;
-  //     Front_Right_Dir_2 = LOW;
-
-  //     Rear_Left_Dir_1 = LOW;
-  //     Rear_Left_Dir_2 = HIGH;
-
-  //     Rear_Right_Dir_1 = HIGH;
-  //     Rear_Right_Dir_2 = LOW;
-  //   }
-  //   if (lateralSpeed > 0) {
-  //     Front_Left_Dir_1 = HIGH;
-  //     Front_Left_Dir_2 = LOW;
-
-  //     Front_Right_Dir_1 = HIGH;
-  //     Front_Right_Dir_2 = LOW;
-
-  //     Rear_Left_Dir_1 = LOW;
-  //     Rear_Left_Dir_2 = HIGH;
-
-  //     Rear_Right_Dir_1 = LOW;
-  //     Rear_Right_Dir_2 = HIGH;
-  //   } else {
-  //     Front_Left_Dir_1 = LOW;
-  //     Front_Left_Dir_2 = HIGH;
-
-  //     Front_Right_Dir_1 = LOW;
-  //     Front_Right_Dir_2 = HIGH;
-
-  //     Rear_Left_Dir_1 = HIGH;
-  //     Rear_Left_Dir_2 = LOW;
-
-  //     Rear_Right_Dir_1 = HIGH;
-  //     Rear_Right_Dir_2 = LOW;
-  //   }
-  // }
 }
 
 const char ctrlTypeUnknown[] PROGMEM = "Unknown";
@@ -532,6 +505,15 @@ PsxControllerHwSpi<PIN_PS2_ATT> psx;
 boolean haveController = false;
 
 void setup() {
+  cameraServo.attach(SERVO_PIN);
+  servoStep = 90;
+
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+
+  pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
+  pinMode(ULTRASONIC_ECHO_PIN, INPUT);
+
   pinMode(FORWARD_LEFT_DIR_1, OUTPUT);
   pinMode(FORWARD_LEFT_DIR_2, OUTPUT);
   pinMode(FORWARD_LEFT_PWM, OUTPUT);
@@ -677,7 +659,6 @@ void loop() {
       Front_Right_PWM = abs(Front_Right_PWM);
       Rear_Left_PWM = abs(Rear_Left_PWM);
       Rear_Right_PWM = abs(Rear_Right_PWM);
-
     }
   }
   delay(1000 / 60);
