@@ -138,6 +138,7 @@ void Ultrasonic() {
 
   if(distance < 3){
     Serial.println("Something's on the back");
+    tone(BUZZER_PIN, 783.33);
     Front_Left_PWM = 0;
     Front_Right_PWM = 0;
     Rear_Left_PWM = 0;
@@ -309,9 +310,9 @@ void Input() {
 
     case L1:
       Serial.println("SERVO UP");
-      servoStep++;
-      if(servoStep > 180){
-        servoStep = 180;
+      servoStep--;
+      if(servoStep < 0){
+        servoStep = 0;
       }
 
       L1_Pressed = true;
@@ -358,9 +359,9 @@ void Input() {
 
     case R1:
       Serial.println("SERVO DOWN");
-      servoStep--;
-      if(servoStep < 0){
-        servoStep = 0;
+      servoStep++;
+      if(servoStep > 180){
+        servoStep = 180;
       }
       R1_Pressed = true;
       Serial.println("RotateClockwise");
@@ -382,16 +383,7 @@ void Input() {
       break;
 
     case R2:
-      if(lightOpen){
-        Serial.println("Close Light");
-        digitalWrite(LED1, LOW);
-        digitalWrite(LED2, LOW);
-      }
-      else{
-        Serial.println("Open Light");
-        digitalWrite(LED1, HIGH);
-        digitalWrite(LED2, HIGH);
-      }
+      // S
       R2_Pressed = true;
       break;
 
@@ -508,8 +500,8 @@ void setup() {
   cameraServo.attach(SERVO_PIN);
   servoStep = 90;
 
-  pinMode(LED1, OUTPUT);
-  pinMode(LED2, OUTPUT);
+  // pinMode(LED1, OUTPUT);
+  // pinMode(LED2, OUTPUT);
 
   pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
   pinMode(ULTRASONIC_ECHO_PIN, INPUT);
@@ -607,10 +599,10 @@ void loop() {
       lateralSpeed = slx - 128;
       centerRPM = srx - 128;
       
-      Front_Left_PWM = (1.0/0.58) * (0.7071 * lateralSpeed + 0.7071 * forwardSpeed + 0.58 * centerRPM);
-      Front_Right_PWM = (1.0/0.58) * (0.7071 * lateralSpeed + -0.7071 * forwardSpeed + 0.58 * centerRPM);
-      Rear_Left_PWM = (1.0/0.58) * (-0.7071 * lateralSpeed + 0.7071 * forwardSpeed + 0.58 * centerRPM);
-      Rear_Right_PWM = (1.0/0.58) * (-0.7071 * lateralSpeed + -0.7071 * forwardSpeed + 0.58 * centerRPM);
+      Front_Left_PWM = (1.0/0.58) * (0.7071 * lateralSpeed + 0.7071 * forwardSpeed + 0.58 * centerRPM) ; // W1
+      Front_Right_PWM = (1.0/0.58) * (0.7071 * lateralSpeed + -0.7071 * forwardSpeed + 0.58 * centerRPM); // W2
+      Rear_Left_PWM = (1.0/0.58) * (-0.7071 * lateralSpeed + 0.7071 * forwardSpeed + 0.58 * centerRPM) ; // W4
+      Rear_Right_PWM = (1.0/0.58) * (-0.7071 * lateralSpeed + -0.7071 * forwardSpeed + 0.58 * centerRPM) ; // W3
 
       if(Front_Left_PWM > 0){
         Front_Left_Dir_1 = HIGH;
@@ -659,6 +651,11 @@ void loop() {
       Front_Right_PWM = abs(Front_Right_PWM);
       Rear_Left_PWM = abs(Rear_Left_PWM);
       Rear_Right_PWM = abs(Rear_Right_PWM);
+
+      Front_Left_PWM = (Front_Left_PWM>255) ? 255 : Front_Left_PWM;
+      Front_Right_PWM = (Front_Right_PWM>255) ? 255 : Front_Right_PWM;
+      Rear_Left_PWM = (Rear_Left_PWM>255) ? 255 : Rear_Left_PWM;
+      Rear_Right_PWM = (Rear_Right_PWM>255) ? 255 : Rear_Right_PWM;
     }
   }
   delay(1000 / 60);
