@@ -144,6 +144,20 @@ void Ultrasonic() {
     Rear_Left_PWM = 0;
     Rear_Right_PWM = 0;
   }
+  else if(distance < 5){
+    tone(BUZZER_PIN, 583.33);
+    Front_Left_PWM = 0;
+    Front_Right_PWM = 0;
+    Rear_Left_PWM = 0;
+    Rear_Right_PWM = 0;
+  }
+  else if(distance < 8){
+    tone(BUZZER_PIN, 440);
+    Front_Left_PWM = 0;
+    Front_Right_PWM = 0;
+    Rear_Left_PWM = 0;
+    Rear_Right_PWM = 0;
+  }
 }
 
 void Input() {
@@ -309,29 +323,30 @@ void Input() {
       break;
 
     case L1:
-      Serial.println("SERVO UP");
-      servoStep--;
+      Serial.println("SERVO DOWN");
+      // servoStep = 90;
+      servoStep-=5;
       if(servoStep < 0){
         servoStep = 0;
       }
 
       L1_Pressed = true;
-      Serial.println("RotateCounterClockwise");
-      Front_Left_Dir_1 = LOW;
-      Front_Left_Dir_2 = HIGH;
-      Front_Left_PWM = SPEED;
+      // Serial.println("RotateCounterClockwise");
+      // Front_Left_Dir_1 = LOW;
+      // Front_Left_Dir_2 = HIGH;
+      // Front_Left_PWM = SPEED;
 
-      Front_Right_Dir_1 = LOW;
-      Front_Right_Dir_2 = HIGH;
-      Front_Right_PWM = SPEED;
+      // Front_Right_Dir_1 = LOW;
+      // Front_Right_Dir_2 = HIGH;
+      // Front_Right_PWM = SPEED;
 
-      Rear_Left_Dir_1 = LOW;
-      Rear_Left_Dir_2 = HIGH;
-      Rear_Left_PWM = SPEED;
+      // Rear_Left_Dir_1 = LOW;
+      // Rear_Left_Dir_2 = HIGH;
+      // Rear_Left_PWM = SPEED;
 
-      Rear_Right_Dir_1 = LOW;
-      Rear_Right_Dir_2 = HIGH;
-      Rear_Right_PWM = SPEED;
+      // Rear_Right_Dir_1 = LOW;
+      // Rear_Right_Dir_2 = HIGH;
+      // Rear_Right_PWM = SPEED;
       break;
 
     case L2:
@@ -358,28 +373,31 @@ void Input() {
       break;
 
     case R1:
-      Serial.println("SERVO DOWN");
-      servoStep++;
+      Serial.println("SERVO UP");
+      // servoStep = 150;
+      
+      servoStep+=5;
       if(servoStep > 180){
         servoStep = 180;
       }
       R1_Pressed = true;
-      Serial.println("RotateClockwise");
-      Front_Left_Dir_1 = HIGH;
-      Front_Left_Dir_2 = LOW;
-      Front_Left_PWM = SPEED;
+      // Serial.println("RotateClockwise");
+      // Front_Left_Dir_1 = HIGH;
+      // Front_Left_Dir_2 = LOW;
+      // Front_Left_PWM = SPEED;
 
-      Front_Right_Dir_1 = HIGH;
-      Front_Right_Dir_2 = LOW;
-      Front_Right_PWM = SPEED;
+      // Front_Right_Dir_1 = HIGH;
+      // Front_Right_Dir_2 = LOW;
+      // Front_Right_PWM = SPEED;
 
-      Rear_Left_Dir_1 = HIGH;
-      Rear_Left_Dir_2 = LOW;
-      Rear_Left_PWM = SPEED;
+      // Rear_Left_Dir_1 = HIGH;
+      // Rear_Left_Dir_2 = LOW;
+      
+      // Rear_Left_PWM = SPEED;
 
-      Rear_Right_Dir_1 = HIGH;
-      Rear_Right_Dir_2 = LOW;
-      Rear_Right_PWM = SPEED;
+      // Rear_Right_Dir_1 = HIGH;
+      // Rear_Right_Dir_2 = LOW;
+      // Rear_Right_PWM = SPEED;
       break;
 
     case R2:
@@ -576,6 +594,7 @@ void loop() {
       InputTask.check();
       ProcessTask.check();
       OutputTask.check();
+      // UltrasonicTask.check();
 
       fastDigitalWrite(PIN_BUTTONPRESS, !!psx.getButtonWord());
       dumpButtons(psx.getButtonWord());
